@@ -321,7 +321,7 @@ if (isset($_GET['hapus'])) {
                 <li><a href="kelola_wisata.php"><i class="fas fa-map-marker-alt"></i> Kelola Wisata</a></li>
                 <li><a href="kelola_ulasan.php" class="active"><i class="fas fa-comments"></i> Kelola Ulasan</a></li>
                 <li><a href="kelola_admin.php"><i class="fas fa-users"></i> Kelola Admin</a></li>
-                <li><a href="#"><i class="fas fa-cog"></i> Pengaturan</a></li>
+                <li><a href="setting.php"><i class="fas fa-cog"></i> Pengaturan</a></li>
             </ul>
         </div>
 

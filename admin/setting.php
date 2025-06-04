@@ -1,25 +1,70 @@
 <?php
-require_once __DIR__ . '\config\auth.php';
-require_once __DIR__ . '\config\database.php';
+require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/config/auth.php';
 
-// Query untuk data dashboard
-$total_wisata = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM wisata"))['total'];
-$total_ulasan = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM ulasan"))['total'];
-$total_admin = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM admin"))['total'];
-$avg_rating = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(rating) as avg FROM ulasan"))['avg'];
-$recent_activities = mysqli_query($conn, 
-    "SELECT u.*, w.nama as wisata_nama 
-     FROM ulasan u 
-     JOIN wisata w ON u.wisata_id = w.id 
-     ORDER BY u.created_at DESC 
-     LIMIT 5");
-$popular_wisata = mysqli_query($conn,
-    "SELECT w.*, COUNT(u.id) as total_ulasan, AVG(u.rating) as avg_rating
-     FROM wisata w
-     LEFT JOIN ulasan u ON w.id = u.wisata_id
-     GROUP BY w.id
-     ORDER BY total_ulasan DESC, avg_rating DESC
-     LIMIT 3");
+// Pastikan hanya admin yang bisa mengakses
+if ($_SESSION['admin_level'] != 'super') {
+    header("Location: dashboard.php");
+    exit;
+}
+
+// Inisialisasi variabel
+$success_message = '';
+$error_message = '';
+
+// Proses update pengaturan
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    try {
+        // Update informasi umum
+        if (isset($_POST['update_general'])) {
+            $site_name = mysqli_real_escape_string($conn, $_POST['site_name']);
+            $site_description = mysqli_real_escape_string($conn, $_POST['site_description']);
+            
+            // Simpan ke database (contoh, bisa disesuaikan dengan tabel settings Anda)
+            $query = "UPDATE settings SET 
+                      site_name = '$site_name',
+                      site_description = '$site_description' 
+                      WHERE id = 1";
+            mysqli_query($conn, $query);
+            
+            $success_message = "Pengaturan umum berhasil diperbarui!";
+        }
+        
+        // Update logo
+        if (isset($_FILES['site_logo']) && $_FILES['site_logo']['error'] == UPLOAD_ERR_OK) {
+            $target_dir = "../assets/uploads/";
+            if (!file_exists($target_dir)) {
+                mkdir($target_dir, 0777, true);
+            }
+            
+            $file_name = basename($_FILES['site_logo']['name']);
+            $target_file = $target_dir . $file_name;
+            $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+            
+            // Validasi file
+            $allowed_types = ['jpg', 'jpeg', 'png', 'gif'];
+            if (in_array($imageFileType, $allowed_types)) {
+                if (move_uploaded_file($_FILES['site_logo']['tmp_name'], $target_file)) {
+                    $query = "UPDATE settings SET site_logo = '$file_name' WHERE id = 1";
+                    mysqli_query($conn, $query);
+                    $success_message .= " Logo berhasil diupload!";
+                } else {
+                    $error_message = "Gagal mengupload logo.";
+                }
+            } else {
+                $error_message = "Hanya file JPG, JPEG, PNG & GIF yang diperbolehkan.";
+            }
+        }
+        
+    } catch (Exception $e) {
+        $error_message = "Terjadi kesalahan: " . $e->getMessage();
+    }
+}
+
+// Ambil data pengaturan saat ini
+$settings_query = "SELECT * FROM settings WHERE id = 1";
+$settings_result = mysqli_query($conn, $settings_query);
+$settings = mysqli_fetch_assoc($settings_result);
 ?>
 
 <!DOCTYPE html>
@@ -27,12 +72,25 @@ $popular_wisata = mysqli_query($conn,
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Admin - Wisata Lampung</title>
+    <title>Pengaturan - Wisata Lampung</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
+            --primary: #4361ee;
+            --primary-light: #ebefff;
+            --secondary: #3f37c9;
+            --dark: #1f2937;
+            --light: #f9fafb;
+            --accent: #f72585;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray: #6b7280;
+            --gray-light: #e5e7eb;
+        }
+
+         :root {
             --primary: #4361ee;
             --primary-light: #ebefff;
             --secondary: #3f37c9;
@@ -547,21 +605,107 @@ $popular_wisata = mysqli_query($conn,
                 display: none;
             }
         }
+        
+        .settings-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .settings-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .settings-card h3 {
+            margin-top: 0;
+            color: var(--primary);
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--primary-light);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-light);
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .logo-preview {
+            width: 150px;
+            height: 150px;
+            object-fit: contain;
+            border: 2px dashed var(--gray-light);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .submit-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--secondary);
+        }
+
+        .message {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+        }
+
+        .success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        @media (max-width: 768px) {
+            .settings-container {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
     <!-- Header -->
-    <header class="admin-header" id="adminHeader">
+    <header class="admin-header">
         <div class="admin-brand">
             <i class="fas fa-map-marked-alt"></i>
             <span>Wisata Lampung</span>
         </div>
         <div class="admin-user">
             <div class="admin-avatar">
-                <i class="fas fa-user"></i>
+                <i class="fas fa-user-shield"></i>
             </div>
             <span><?php echo htmlspecialchars($_SESSION['admin_name']); ?></span>
-            <a href="/logout.php" class="logout-btn">
+            <a href="logout.php" class="logout-btn">
                 <i class="fas fa-sign-out-alt"></i>
                 <span>Logout</span>
             </a>
@@ -570,266 +714,156 @@ $popular_wisata = mysqli_query($conn,
 
     <div class="admin-container">
         <!-- Sidebar -->
-        <div class="sidebar" id="sidebar">
+        <div class="sidebar">
             <ul class="sidebar-menu">
-                <li><a href="dashboard.php" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="kelola_wisata.php"><i class="fas fa-map-marker-alt"></i> Kelola Wisata</a></li>
+                <li><a href="dashboard.php"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
+                <li><a href="manage_wisata.php"><i class="fas fa-map-marker-alt"></i> Kelola Wisata</a></li>
                 <li><a href="kelola_ulasan.php"><i class="fas fa-comments"></i> Kelola Ulasan</a></li>
                 <li><a href="kelola_admin.php"><i class="fas fa-users"></i> Kelola Admin</a></li>
-                <li><a href="setting.php"><i class="fas fa-cog"></i> Pengaturan</a></li>
+                <li><a href="setting.php" class="active"><i class="fas fa-cog"></i> Pengaturan</a></li>
             </ul>
         </div>
 
         <!-- Main Content -->
-        <div class="main-content" id="mainContent">
+        <div class="main-content">
             <div class="dashboard-title">
-                <h2>Dashboard</h2>
-                <button class="toggle-sidebar" id="toggleSidebar">
-                    <i class="fas fa-bars"></i>
-                </button>
+                <h2>Pengaturan Sistem</h2>
             </div>
 
-            <!-- Statistik Cards -->
-            <div class="dashboard-cards">
-                <div class="card animate-fadeIn delay-1">
-                    <h3><i class="fas fa-map-marker-alt"></i> Total Wisata</h3>
-                    <div class="number"><?php echo number_format($total_wisata); ?></div>
-                    <div class="card-footer">
-                        <span>Semua Kategori</span>
-                        <div class="trend up">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>5.2%</span>
+            <?php if ($success_message) : ?>
+                <div class="message success">
+                    <i class="fas fa-check-circle"></i> <?php echo $success_message; ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($error_message) : ?>
+                <div class="message error">
+                    <i class="fas fa-exclamation-circle"></i> <?php echo $error_message; ?>
+                </div>
+            <?php endif; ?>
+
+            <div class="settings-container">
+                <!-- Form Pengaturan Umum -->
+                <div class="settings-card">
+                    <h3><i class="fas fa-info-circle"></i> Informasi Umum</h3>
+                    <form method="POST" action="setting.php">
+                        <div class="form-group">
+                            <label for="site_name">Nama Situs</label>
+                            <input type="text" id="site_name" name="site_name" class="form-control" 
+                                   value="<?php echo htmlspecialchars($settings['site_name'] ?? 'Wisata Lampung'); ?>" required>
                         </div>
-                    </div>
-                </div>
-
-                <div class="card animate-fadeIn delay-2">
-                    <h3><i class="fas fa-star"></i> Total Ulasan</h3>
-                    <div class="number"><?php echo number_format($total_ulasan); ?></div>
-                    <div class="card-footer">
-                        <span>Rating Rata-rata: <?php echo number_format($avg_rating, 1); ?>/5</span>
-                        <div class="trend up">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>12.7%</span>
+                        
+                        <div class="form-group">
+                            <label for="site_description">Deskripsi Situs</label>
+                            <textarea id="site_description" name="site_description" class="form-control" 
+                                      rows="4" required><?php echo htmlspecialchars($settings['site_description'] ?? 'Sistem Informasi Wisata Lampung'); ?></textarea>
                         </div>
-                    </div>
+                        
+                        <button type="submit" name="update_general" class="submit-btn">
+                            <i class="fas fa-save"></i> Simpan Perubahan
+                        </button>
+                    </form>
                 </div>
 
-                <div class="card animate-fadeIn delay-3">
-                    <h3><i class="fas fa-users"></i> Total Admin</h3>
-                    <div class="number"><?php echo number_format($total_admin); ?></div>
-                    <div class="card-footer">
-                        <span>Aktif: <?php echo $total_admin; ?></span>
-                        <div class="trend">
-                            <i class="fas fa-equals"></i>
-                            <span>0%</span>
+                <!-- Form Logo -->
+                <div class="settings-card">
+                    <h3><i class="fas fa-image"></i> Logo Situs</h3>
+                    <form method="POST" action="setting.php" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label for="site_logo">Upload Logo Baru</label>
+                            <input type="file" id="site_logo" name="site_logo" class="form-control" accept="image/*">
+                            <small>Format: JPG, PNG, GIF (Maks. 2MB)</small>
                         </div>
-                    </div>
-                </div>
-
-                <div class="card animate-fadeIn delay-4">
-                    <h3><i class="fas fa-chart-line"></i> Aktivitas</h3>
-                    <div class="number"><?php echo number_format($total_ulasan + $total_wisata); ?></div>
-                    <div class="card-footer">
-                        <span>Total Interaksi</span>
-                        <div class="trend up">
-                            <i class="fas fa-arrow-up"></i>
-                            <span>8.3%</span>
+                        
+                        <div class="form-group">
+                            <label>Pratinjau Logo</label>
+                            <?php if (!empty($settings['site_logo'])) : ?>
+                                <img src="../assets/uploads/<?php echo htmlspecialchars($settings['site_logo']); ?>" 
+                                     class="logo-preview" id="logoPreview">
+                            <?php else : ?>
+                                <img src="../assets/images/default-logo.png" class="logo-preview" id="logoPreview">
+                            <?php endif; ?>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chart Section -->
-            <div class="chart-container animate-fadeIn">
-                <div class="chart-header">
-                    <h3><i class="fas fa-chart-bar"></i> Statistik Kunjungan</h3>
-                    <select id="chartPeriod" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--gray-light);">
-                        <option value="week">Minggu Ini</option>
-                        <option value="month">Bulan Ini</option>
-                        <option value="year">Tahun Ini</option>
-                    </select>
-                </div>
-                <canvas id="visitorsChart"></canvas>
-            </div>
-
-            <!-- Activities Section -->
-            <div class="activities-section">
-                <!-- Recent Activities -->
-                <div class="recent-activities animate-fadeIn">
-                    <div class="section-header">
-                        <h3><i class="fas fa-history"></i> Aktivitas Terbaru</h3>
-                        <a href="#">Lihat Semua</a>
-                    </div>
-                    
-                    <?php if (mysqli_num_rows($recent_activities) > 0) { ?>
-                        <?php while ($activity = mysqli_fetch_assoc($recent_activities)) { ?>
-                            <div class="activity-item">
-                                <div class="activity-icon">
-                                    <i class="fas fa-comment-dots"></i>
-                                </div>
-                                <div class="activity-content">
-                                    <div class="activity-user"><?php echo htmlspecialchars($activity['nama_user']); ?></div>
-                                    <div class="activity-desc">Memberikan ulasan di <?php echo htmlspecialchars($activity['wisata_nama']); ?></div>
-                                    <div class="activity-stars"><?php echo str_repeat('★', $activity['rating']) . str_repeat('☆', 5 - $activity['rating']); ?></div>
-                                    <div class="activity-time">
-                                        <i class="far fa-clock"></i>
-                                        <?php echo date('d M Y H:i', strtotime($activity['created_at'])); ?>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php } ?>
-                    <?php } else { ?>
-                        <p style="text-align: center; color: var(--gray); padding: 20px 0;">Belum ada aktivitas terbaru</p>
-                    <?php } ?>
+                        
+                        <button type="submit" class="submit-btn">
+                            <i class="fas fa-upload"></i> Upload Logo
+                        </button>
+                    </form>
                 </div>
 
-                <!-- Popular Wisata -->
-                <div class="popular-wisata animate-fadeIn">
-                    <div class="section-header">
-                        <h3><i class="fas fa-fire"></i> Wisata Populer</h3>
-                        <a href="kelola_wisata.php">Lihat Semua</a>
-                    </div>
-                    
-                    <?php if (mysqli_num_rows($popular_wisata) > 0) { ?>
-                        <?php while ($wisata = mysqli_fetch_assoc($popular_wisata)) { ?>
-                            <div class="popular-item">
-                                <img src="../assets/uploads/<?php echo htmlspecialchars($wisata['gambar']); ?>" class="popular-img" alt="<?php echo htmlspecialchars($wisata['nama']); ?>">
-                                <div class="popular-content">
-                                    <div class="popular-title"><?php echo htmlspecialchars($wisata['nama']); ?></div>
-                                    <div class="popular-meta">
-                                        <span><?php echo $wisata['kategori']; ?></span>
-                                        <div class="popular-rating">
-                                            <i class="fas fa-star"></i>
-                                            <span><?php echo number_format($wisata['avg_rating'] ?? 0, 1); ?></span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php } ?>
-                    <?php } else { ?>
-                        <p style="text-align: center; color: var(--gray); padding: 20px 0;">Belum ada data wisata</p>
-                    <?php } ?>
+                <!-- Form Pengaturan Lainnya -->
+                <div class="settings-card">
+                    <h3><i class="fas fa-envelope"></i> Pengaturan Email</h3>
+                    <form method="POST" action="setting.php">
+                        <div class="form-group">
+                            <label for="email_sender">Email Pengirim</label>
+                            <input type="email" id="email_sender" name="email_sender" class="form-control" 
+                                   value="<?php echo htmlspecialchars($settings['email_sender'] ?? 'noreply@wisatalampung.id'); ?>" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="email_name">Nama Pengirim</label>
+                            <input type="text" id="email_name" name="email_name" class="form-control" 
+                                   value="<?php echo htmlspecialchars($settings['email_name'] ?? 'Wisata Lampung'); ?>" required>
+                        </div>
+                        
+                        <button type="submit" name="update_email" class="submit-btn">
+                            <i class="fas fa-save"></i> Simpan Perubahan
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Form Tema -->
+                <div class="settings-card">
+                    <h3><i class="fas fa-palette"></i> Tema Aplikasi</h3>
+                    <form method="POST" action="setting.php">
+                        <div class="form-group">
+                            <label for="theme_color">Warna Tema</label>
+                            <input type="color" id="theme_color" name="theme_color" class="form-control" 
+                                   value="<?php echo htmlspecialchars($settings['theme_color'] ?? '#4361ee'); ?>">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="dark_mode">Mode Gelap</label>
+                            <select id="dark_mode" name="dark_mode" class="form-control">
+                                <option value="0" <?php echo ($settings['dark_mode'] ?? 0) == 0 ? 'selected' : ''; ?>>Tidak Aktif</option>
+                                <option value="1" <?php echo ($settings['dark_mode'] ?? 0) == 1 ? 'selected' : ''; ?>>Aktif</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" name="update_theme" class="submit-btn">
+                            <i class="fas fa-save"></i> Simpan Perubahan
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Toggle Sidebar
-        document.getElementById('toggleSidebar').addEventListener('click', function() {
-            document.getElementById('sidebar').classList.toggle('active');
-            document.getElementById('mainContent').classList.toggle('expanded');
-        });
-
-        // Header Scroll Effect
-        window.addEventListener('scroll', function() {
-            if (window.scrollY > 10) {
-                document.getElementById('adminHeader').classList.add('scrolled');
-            } else {
-                document.getElementById('adminHeader').classList.remove('scrolled');
-            }
-        });
-
-        // Chart.js Implementation
-        const ctx = document.getElementById('visitorsChart').getContext('2d');
-        const visitorsChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
-                datasets: [{
-                    label: 'Pengunjung',
-                    data: [120, 190, 170, 220, 250, 310, 280],
-                    backgroundColor: 'rgba(67, 97, 238, 0.1)',
-                    borderColor: '#4361ee',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#4361ee',
-                    pointBorderWidth: 2,
-                    pointRadius: 5,
-                    pointHoverRadius: 7
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        backgroundColor: '#1f2937',
-                        titleFont: { family: 'Poppins', size: 14 },
-                        bodyFont: { family: 'Poppins', size: 12 },
-                        padding: 12,
-                        cornerRadius: 8,
-                        displayColors: false
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
-                        },
-                        ticks: {
-                            font: { family: 'Poppins' }
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        },
-                        ticks: {
-                            font: { family: 'Poppins' }
-                        }
-                    }
+        // Preview logo sebelum upload
+        document.getElementById('site_logo').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('logoPreview').src = e.target.result;
                 }
+                reader.readAsDataURL(file);
             }
         });
 
-        // Change chart data based on period
-        document.getElementById('chartPeriod').addEventListener('change', function() {
-            const period = this.value;
-            let newLabels, newData;
+        // Toggle sidebar untuk mobile
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'toggle-sidebar';
+            toggleBtn.innerHTML = '<i class="fas fa-bars"></i>';
+            document.querySelector('.dashboard-title').appendChild(toggleBtn);
             
-            if (period === 'week') {
-                newLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-                newData = [120, 190, 170, 220, 250, 310, 280];
-            } else if (period === 'month') {
-                newLabels = ['Minggu 1', 'Minggu 2', 'Minggu 3', 'Minggu 4'];
-                newData = [850, 920, 780, 950];
-            } else {
-                newLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-                newData = [3200, 2800, 3500, 3800, 4200, 4500, 5100, 4900, 4700, 5200, 4800, 5500];
-            }
-            
-            visitorsChart.data.labels = newLabels;
-            visitorsChart.data.datasets[0].data = newData;
-            visitorsChart.update();
-        });
-
-        // Animation on scroll
-        const animateOnScroll = function() {
-            const elements = document.querySelectorAll('.animate-fadeIn');
-            elements.forEach(el => {
-                const elTop = el.getBoundingClientRect().top;
-                const windowHeight = window.innerHeight;
-                
-                if (elTop < windowHeight - 100) {
-                    el.style.opacity = 1;
-                    el.style.transform = 'translateY(0)';
-                }
+            toggleBtn.addEventListener('click', function() {
+                document.querySelector('.sidebar').classList.toggle('active');
             });
-        };
-
-        // Run once on load
-        animateOnScroll();
-        
-        // Run on scroll
-        window.addEventListener('scroll', animateOnScroll);
+        });
     </script>
 </body>
 </html>
