@@ -1,0 +1,869 @@
+<?php
+require_once __DIR__ . '\admin\config\database.php';
+
+// Query untuk mendapatkan data wisata
+$wisata_query = "SELECT * FROM wisata ORDER BY created_at DESC";
+$wisata_result = mysqli_query($conn, $wisata_query);
+
+// Query untuk mendapatkan wisata populer (berdasarkan rating)
+$popular_query = "SELECT w.*, AVG(u.rating) as avg_rating 
+                 FROM wisata w 
+                 LEFT JOIN ulasan u ON w.id = u.wisata_id 
+                 GROUP BY w.id 
+                 ORDER BY avg_rating DESC 
+                 LIMIT 3";
+$popular_result = mysqli_query($conn, $popular_query);
+
+// Proses tambah ulasan
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['submit_ulasan'])) {
+    $wisata_id = intval($_POST['wisata_id']);
+    $nama_user = mysqli_real_escape_string($conn, $_POST['nama_user']);
+    $rating = intval($_POST['rating']);
+    $komentar = mysqli_real_escape_string($conn, $_POST['komentar']);
+    
+    $query = "INSERT INTO ulasan (wisata_id, nama_user, rating, komentar) 
+              VALUES ($wisata_id, '$nama_user', $rating, '$komentar')";
+    mysqli_query($conn, $query);
+    
+    // Redirect untuk menghindari resubmit form
+    header("Location: ".$_SERVER['PHP_SELF']);
+    exit;
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wisata Lampung - Explore Keindahan Lampung</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-light: #ebefff;
+            --secondary: #3f37c9;
+            --dark: #1f2937;
+            --light: #f9fafb;
+            --accent: #f72585;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gray: #6b7280;
+            --gray-light: #e5e7eb;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f5f7fa;
+            color: var(--dark);
+            line-height: 1.6;
+        }
+
+        /* Header Styles */
+        .main-header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .main-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .main-brand i {
+            font-size: 1.5rem;
+            color: var(--accent);
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-menu a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .nav-menu a:hover {
+            color: var(--accent);
+        }
+
+        .admin-btn {
+            color: white;
+            background-color: var(--accent);
+            border: none;
+            border-radius: 6px;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .admin-btn:hover {
+            background-color: #d11668;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(247, 37, 133, 0.3);
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), 
+                        url('../assets/images/hero-bg.jpg');
+            background-size: cover;
+            background-position: center;
+            height: 60vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            padding: 0 2rem;
+            margin-top: 60px;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 800px;
+            margin-bottom: 2rem;
+        }
+
+        .search-bar {
+            display: flex;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 1rem;
+            border: none;
+            border-radius: 8px 0 0 8px;
+            font-size: 1rem;
+        }
+
+        .search-bar button {
+            padding: 0 1.5rem;
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 0 8px 8px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .search-bar button:hover {
+            background-color: #d11668;
+        }
+
+        /* Main Content */
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            position: relative;
+            display: inline-block;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            width: 50px;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            border-radius: 2px;
+        }
+
+        /* Wisata Grid */
+        .wisata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .wisata-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .wisata-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .wisata-img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+
+        .wisata-content {
+            padding: 1.5rem;
+        }
+
+        .wisata-title {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .wisata-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+
+        .wisata-category {
+            background-color: var(--primary-light);
+            color: var(--primary);
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .wisata-rating {
+            color: var(--warning);
+            margin-bottom: 1rem;
+        }
+
+        .wisata-description {
+            margin-bottom: 1.5rem;
+            color: var(--gray);
+            font-size: 0.95rem;
+        }
+
+        .wisata-actions {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--secondary);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+
+        .btn-outline:hover {
+            background-color: var(--primary-light);
+        }
+
+        /* Popular Wisata */
+        .popular-wisata {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .popular-card {
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .popular-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .popular-img {
+            width: 150px;
+            height: 150px;
+            object-fit: cover;
+        }
+
+        .popular-content {
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .popular-rating {
+            color: var(--warning);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Ulasan Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 2rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            animation: modalFadeIn 0.3s ease;
+        }
+
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--gray-light);
+        }
+
+        .modal-header h3 {
+            color: var(--dark);
+            font-size: 1.5rem;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--gray);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-light);
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            transition: all 0.3s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+        }
+
+        textarea.form-control {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .rating-stars {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .rating-stars input {
+            display: none;
+        }
+
+        .rating-stars label {
+            font-size: 1.5rem;
+            color: var(--gray-light);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .rating-stars input:checked ~ label,
+        .rating-stars label:hover,
+        .rating-stars label:hover ~ label {
+            color: var(--warning);
+        }
+
+        .submit-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--secondary);
+        }
+
+        /* Ulasan List */
+        .ulasan-list {
+            margin-top: 2rem;
+        }
+
+        .ulasan-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--gray-light);
+        }
+
+        .ulasan-item:last-child {
+            border-bottom: none;
+        }
+
+        .ulasan-user {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .ulasan-rating {
+            color: var(--warning);
+            margin-bottom: 0.5rem;
+        }
+
+        .ulasan-text {
+            color: var(--gray);
+        }
+
+        .ulasan-date {
+            font-size: 0.8rem;
+            color: var(--gray);
+            margin-top: 0.5rem;
+        }
+
+        /* Footer */
+        .main-footer {
+            background-color: var(--dark);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-links a {
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent);
+        }
+
+        .footer-social {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .footer-social a {
+            color: white;
+            font-size: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        .footer-social a:hover {
+            color: var(--accent);
+        }
+
+        .footer-copyright {
+            color: var(--gray-light);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+            
+            .popular-wisata {
+                grid-template-columns: 1fr;
+            }
+            
+            .popular-card {
+                flex-direction: column;
+            }
+            
+            .popular-img {
+                width: 100%;
+                height: 200px;
+            }
+            
+            .nav-menu {
+                display: none;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .hero {
+                height: 70vh;
+            }
+            
+            .hero h1 {
+                font-size: 1.8rem;
+            }
+            
+            .wisata-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="main-header">
+        <div class="main-brand">
+            <i class="fas fa-map-marked-alt"></i>
+            <span>Wisata Lampung</span>
+        </div>
+        <nav class="nav-menu">
+            <a href="#home">Beranda</a>
+            <a href="#wisata">Wisata</a>
+            <a href="#popular">Populer</a>
+            <a href="#tentang">Tentang</a>
+        </nav>
+        <a href="/admin/login.php" class="admin-btn">
+            <i class="fas fa-user-shield"></i>
+            <span>Admin</span>
+        </a>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <h1>Explore Keindahan Wisata Lampung</h1>
+        <p>Temukan berbagai destinasi wisata menarik di Provinsi Lampung, dari pantai eksotis hingga budaya yang kaya.</p>
+        <div class="search-bar">
+            <input type="text" placeholder="Cari wisata...">
+            <button type="submit"><i class="fas fa-search"></i></button>
+        </div>
+    </section>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- All Wisata Section -->
+        <section id="wisata">
+            <h2 class="section-title">Destinasi Wisata</h2>
+            <div class="wisata-grid">
+                <?php if (mysqli_num_rows($wisata_result) > 0) : ?>
+                    <?php while ($wisata = mysqli_fetch_assoc($wisata_result)) : 
+                        // Query untuk mendapatkan rating rata-rata
+                        $rating_query = "SELECT AVG(rating) as avg_rating FROM ulasan WHERE wisata_id = {$wisata['id']}";
+                        $rating_result = mysqli_query($conn, $rating_query);
+                        $rating_data = mysqli_fetch_assoc($rating_result);
+                        $avg_rating = $rating_data['avg_rating'] ? round($rating_data['avg_rating'], 1) : 0;
+                        
+                        // Query untuk mendapatkan jumlah ulasan
+                        $review_query = "SELECT COUNT(*) as total FROM ulasan WHERE wisata_id = {$wisata['id']}";
+                        $review_result = mysqli_query($conn, $review_query);
+                        $review_data = mysqli_fetch_assoc($review_result);
+                        $total_reviews = $review_data['total'];
+                    ?>
+                        <div class="wisata-card">
+                            <?php if (!empty($wisata['gambar'])) : ?>
+                                <img src="assets/uploads/<?php echo htmlspecialchars($wisata['gambar']); ?>" class="wisata-img" alt="<?php echo htmlspecialchars($wisata['nama']); ?>">
+                            <?php else : ?>
+                                <img src="assets/images/default-wisata.jpg" class="wisata-img" alt="Default Wisata">
+                            <?php endif; ?>
+                            <div class="wisata-content">
+                                <h3 class="wisata-title"><?php echo htmlspecialchars($wisata['nama']); ?></h3>
+                                <div class="wisata-meta">
+                                    <span class="wisata-category"><?php echo htmlspecialchars($wisata['kategori']); ?></span>
+                                    <span><?php echo $total_reviews; ?> Ulasan</span>
+                                </div>
+                                <div class="wisata-rating">
+                                    <?php 
+                                        $full_stars = floor($avg_rating);
+                                        $half_star = ($avg_rating - $full_stars) >= 0.5 ? 1 : 0;
+                                        $empty_stars = 5 - $full_stars - $half_star;
+                                        
+                                        echo str_repeat('★', $full_stars);
+                                        echo $half_star ? '½' : '';
+                                        echo str_repeat('☆', $empty_stars);
+                                        echo " ($avg_rating)";
+                                    ?>
+                                </div>
+                                <p class="wisata-description"><?php echo substr(htmlspecialchars($wisata['deskripsi']), 0, 100); ?>...</p>
+                                <div class="wisata-actions">
+                                    <button class="btn btn-primary" onclick="openUlasanModal(<?php echo $wisata['id']; ?>, '<?php echo htmlspecialchars($wisata['nama']); ?>')">
+                                        <i class="fas fa-comment"></i> Beri Ulasan
+                                    </button>
+                                    <a href="#" class="btn btn-outline">
+                                        <i class="fas fa-map-marker-alt"></i> Lihat Peta
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endwhile; ?>
+                <?php else : ?>
+                    <p style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--gray);">
+                        Belum ada data wisata
+                    </p>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <!-- Popular Wisata Section -->
+        <section id="popular">
+            <h2 class="section-title">Wisata Populer</h2>
+            <div class="popular-wisata">
+                <?php if (mysqli_num_rows($popular_result) > 0) : ?>
+                    <?php while ($wisata = mysqli_fetch_assoc($popular_result)) : 
+                        $avg_rating = $wisata['avg_rating'] ? round($wisata['avg_rating'], 1) : 0;
+                    ?>
+                        <div class="popular-card">
+                            <?php if (!empty($wisata['gambar'])) : ?>
+                                <img src="assets/uploads/<?php echo htmlspecialchars($wisata['gambar']); ?>" class="popular-img" alt="<?php echo htmlspecialchars($wisata['nama']); ?>">
+                            <?php else : ?>
+                                <img src="assets/images/default-wisata.jpg" class="popular-img" alt="Default Wisata">
+                            <?php endif; ?>
+                            <div class="popular-content">
+                                <h3><?php echo htmlspecialchars($wisata['nama']); ?></h3>
+                                <div class="popular-rating">
+                                    <?php 
+                                        $full_stars = floor($avg_rating);
+                                        $half_star = ($avg_rating - $full_stars) >= 0.5 ? 1 : 0;
+                                        $empty_stars = 5 - $full_stars - $half_star;
+                                        
+                                        echo str_repeat('★', $full_stars);
+                                        echo $half_star ? '½' : '';
+                                        echo str_repeat('☆', $empty_stars);
+                                        echo " ($avg_rating)";
+                                    ?>
+                                </div>
+                                <p><?php echo substr(htmlspecialchars($wisata['deskripsi']), 0, 100); ?>...</p>
+                                <button class="btn btn-primary" onclick="openUlasanModal(<?php echo $wisata['id']; ?>, '<?php echo htmlspecialchars($wisata['nama']); ?>')">
+                                    <i class="fas fa-comment"></i> Beri Ulasan
+                                </button>
+                            </div>
+                        </div>
+                    <?php endwhile; ?>
+                <?php else : ?>
+                    <p style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--gray);">
+                        Belum ada data wisata populer
+                    </p>
+                <?php endif; ?>
+            </div>
+        </section>
+    </main>
+
+    <!-- Ulasan Modal -->
+    <div class="modal" id="ulasanModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalWisataTitle">Beri Ulasan</h3>
+                <button class="close-modal" id="closeModal">&times;</button>
+            </div>
+            <form method="POST" action="<?php echo $_SERVER['PHP_SELF']; ?>">
+                <input type="hidden" id="wisataId" name="wisata_id">
+                
+                <div class="form-group">
+                    <label for="nama_user">Nama Anda</label>
+                    <input type="text" id="nama_user" name="nama_user" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Rating</label>
+                    <div class="rating-stars">
+                        <input type="radio" id="star5" name="rating" value="5" required>
+                        <label for="star5">★</label>
+                        <input type="radio" id="star4" name="rating" value="4">
+                        <label for="star4">★</label>
+                        <input type="radio" id="star3" name="rating" value="3">
+                        <label for="star3">★</label>
+                        <input type="radio" id="star2" name="rating" value="2">
+                        <label for="star2">★</label>
+                        <input type="radio" id="star1" name="rating" value="1">
+                        <label for="star1">★</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="komentar">Komentar</label>
+                    <textarea id="komentar" name="komentar" class="form-control" required></textarea>
+                </div>
+                
+                <button type="submit" name="submit_ulasan" class="submit-btn">
+                    <i class="fas fa-paper-plane"></i> Kirim Ulasan
+                </button>
+            </form>
+            
+            <div class="ulasan-list" id="ulasanList">
+                <!-- Daftar ulasan akan dimuat di sini -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="footer-content">
+            <div class="footer-links">
+                <a href="#home">Beranda</a>
+                <a href="#wisata">Wisata</a>
+                <a href="#popular">Populer</a>
+                <a href="#tentang">Tentang</a>
+                <a href="/admin/login.php">Admin</a>
+            </div>
+            <div class="footer-social">
+                <a href="#"><i class="fab fa-facebook"></i></a>
+                <a href="#"><i class="fab fa-instagram"></i></a>
+                <a href="#"><i class="fab fa-twitter"></i></a>
+                <a href="#"><i class="fab fa-youtube"></i></a>
+            </div>
+            <p class="footer-copyright">
+                &copy; <?php echo date('Y'); ?> Wisata Lampung. All rights reserved.
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Modal Functionality
+        const modal = document.getElementById('ulasanModal');
+        const closeModalBtn = document.getElementById('closeModal');
+        
+        function openUlasanModal(wisataId, wisataName) {
+            document.getElementById('modalWisataTitle').textContent = `Beri Ulasan untuk ${wisataName}`;
+            document.getElementById('wisataId').value = wisataId;
+            modal.style.display = 'flex';
+            
+            // Load ulasan untuk wisata ini
+            loadUlasan(wisataId);
+        }
+        
+        closeModalBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        window.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Fungsi untuk memuat ulasan
+        function loadUlasan(wisataId) {
+            const ulasanList = document.getElementById('ulasanList');
+            ulasanList.innerHTML = '<p>Memuat ulasan...</p>';
+            
+            // Dalam implementasi nyata, ini akan menggunakan AJAX untuk mengambil data dari server
+            // Berikut contoh simulasi data
+            setTimeout(() => {
+                // Ini hanya contoh, dalam implementasi nyata Anda akan menggunakan fetch/XMLHttpRequest
+                // untuk mengambil data ulasan dari server
+                ulasanList.innerHTML = `
+                    <div class="ulasan-item">
+                        <div class="ulasan-user">John Doe</div>
+                        <div class="ulasan-rating">★★★★☆ (4)</div>
+                        <p class="ulasan-text">Tempatnya sangat bagus dan bersih. Pelayanan juga ramah.</p>
+                        <div class="ulasan-date">12 Jan 2023</div>
+                    </div>
+                    <div class="ulasan-item">
+                        <div class="ulasan-user">Jane Smith</div>
+                        <div class="ulasan-rating">★★★☆☆ (3)</div>
+                        <p class="ulasan-text">Lokasinya indah tapi agak sulit dijangkau.</p>
+                        <div class="ulasan-date">5 Des 2022</div>
+                    </div>
+                `;
+            }, 500);
+        }
+        
+        // Smooth scrolling untuk anchor link
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+    </script>
+</body>
+</html>
